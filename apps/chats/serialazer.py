@@ -1,9 +1,25 @@
 from rest_framework import serializers
-from .models import Message
+from .models import Chat, Message
 
 
-class PublicKey(serializers.Serializer):
-    public_key = serializers.CharField()
+class ChatSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Chat
+        fields = ("id", "receiver_user_id", "sender_user_id", "created_at")
+        extra_kwargs = {
+            "id": {"read_only": True},
+            "sender_user_id": {"read_only": True},
+            "created_at": {"read_only": True},
+        }
+
+
+class ChatCreateSerializer(serializers.Serializer):
+    receiver_user_id = serializers.IntegerField()
+
+
+class MessageCreateSerializer(serializers.Serializer):
+    ciphertext = serializers.CharField()
+    iv = serializers.CharField(max_length=32)
 
 
 class MessageSerializer(serializers.ModelSerializer):

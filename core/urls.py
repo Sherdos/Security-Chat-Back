@@ -16,14 +16,30 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
+from rest_framework import permissions
+from rest_framework.schemas import get_schema_view
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 
+from .views import swagger_ui_view
+
+schema_view = get_schema_view(
+    title="OnlineChat API",
+    description="API documentation for secure chat endpoints.",
+    version="1.0.0",
+    public=True,
+    permission_classes=[permissions.AllowAny],
+)
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/schema/", schema_view, name="openapi-schema"),
+    path("api/docs/", swagger_ui_view, name="swagger-ui"),
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("api/users/", include("apps.users.urls")),
+    path("api/chats/", include("apps.chats.urls")),
 ]
