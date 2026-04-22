@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OnlineChat WebSocket Demo</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #f5f7fb;
+      }
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        margin-top: 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .row {
+        margin-bottom: 12px;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        color: #333;
+      }
+      input, textarea, button {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px;
+        border: 1px solid #cfd6e4;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      textarea {
+        min-height: 90px;
+        resize: vertical;
+      }
+      button {
+        cursor: pointer;
+        background: #2563eb;
+        color: white;
+        border: none;
+      }
+      button.secondary {
+        background: #475569;
+      }
+      .status {
+        margin: 10px 0;
+        font-weight: 600;
+      }
+      #messages {
+        margin-top: 12px;
+        border: 1px solid #dbe2ef;
+        border-radius: 8px;
+        padding: 10px;
+        min-height: 200px;
+        max-height: 360px;
+        overflow-y: auto;
+        background: #fafcff;
+      }
+      .msg {
+        padding: 8px;
+        margin-bottom: 8px;
+        border-radius: 6px;
+        background: #eef2ff;
+      }
+      .hint {
+        font-size: 13px;
+        color: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Realtime Chat Demo</h1>
+      <p class="hint">Use this page to get a JWT access token, connect to a chat room socket, and send encrypted payload fields (`ciphertext`, `iv`).</p>
+
+      <div class="grid">
+        <div>
+          <h3>1) Get JWT Token</h3>
+          <div class="row">
+            <label for="username">Username</label>
+            <input id="username" type="text" placeholder="username" />
+          </div>
+          <div class="row">
+            <label for="password">Password</label>
+            <input id="password" type="password" placeholder="password" />
+          </div>
+          <button id="getTokenBtn" type="button">Get Access Token</button>
+          <div class="row" style="margin-top: 12px;">
+            <label for="token">Access Token</label>
+            <textarea id="token" placeholder="Paste token or fetch using username/password"></textarea>
+          </div>
+        </div>
+
+        <div>
+          <h3>2) Connect WebSocket</h3>
+          <div class="row">
+            <label for="chatId">Chat ID</label>
+            <input id="chatId" type="number" placeholder="e.g. 1" />
+          </div>
+          <div class="row">
+            <label for="wsBase">WS Base URL</label>
+            <input id="wsBase" type="text" />
+          </div>
+          <button id="connectBtn" type="button">Connect</button>
+          <button id="disconnectBtn" type="button" class="secondary" style="margin-top: 8px;">Disconnect</button>
+          <div class="status" id="status">Status: Disconnected</div>
+        </div>
+      </div>
+
+      <h3>3) Send Message</h3>
+      <div class="grid">
+        <div>
+          <div class="row">
+            <label for="ciphertext">Ciphertext</label>
+            <textarea id="ciphertext" placeholder="encrypted text"></textarea>
+          </div>
+        </div>
+        <div>
+          <div class="row">
+            <label for="iv">IV (max 32 chars)</label>
+            <input id="iv" type="text" maxlength="32" placeholder="initialization-vector" />
+          </div>
+          <button id="sendBtn" type="button">Send</button>
+        </div>
+      </div>
+
+      <h3>4) Incoming Events</h3>
+      <div id="messages"></div>
+    </div>
+
+    <script>
+      const usernameEl = document.getElementById('username');
+      const passwordEl = document.getElementById('password');
+      const tokenEl = document.getElementById('token');
+      const chatIdEl = document.getElementById('chatId');
+      const wsBaseEl = document.getElementById('wsBase');
+      const statusEl = document.getElementById('status');
+      const ciphertextEl = document.getElementById('ciphertext');
+      const ivEl = document.getElementById('iv');
+      const messagesEl = document.getElementById('messages');
+
+      let socket = null;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      wsBaseEl.value = `${protocol}://${window.location.host}`;
+
+      function appendMessage(payload, title = 'event') {
+        const div = document.createElement('div');
+        div.className = 'msg';
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${title}: ${JSON.stringify(payload)}`;
+        messagesEl.prepend(div);
+      }
+
+      async function getToken() {
+        const username = usernameEl.value.trim();
+        const password = passwordEl.value;
+
+        if (!username || !password) {
+          appendMessage({ detail: 'username and password are required' }, 'error');
+          return;
+        }
+
+        const response = await fetch('/api/token/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          appendMessage(data, 'token-error');
+          return;
+        }
+
+        tokenEl.value = data.access;
+        appendMessage({ detail: 'token acquired' }, 'token');
+      }
+
+      function connectSocket() {
+        const token = tokenEl.value.trim();
+        const chatId = chatIdEl.value.trim();
+        const wsBase = wsBaseEl.value.trim();
+
+        if (!token || !chatId || !wsBase) {
+          appendMessage({ detail: 'token, chatId and wsBase are required' }, 'error');
+          return;
+        }
+
+        if (socket) {
+          socket.close();
+        }
+
+        const socketUrl = `${wsBase}/ws/chats/${chatId}/?token=${encodeURIComponent(token)}`;
+        socket = new WebSocket(socketUrl);
+
+        socket.onopen = () => {
+          statusEl.textContent = 'Status: Connected';
+          appendMessage({ socketUrl }, 'connected');
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            appendMessage(JSON.parse(event.data), 'message');
+          } catch {
+            appendMessage({ raw: event.data }, 'message');
+          }
+        };
+
+        socket.onclose = (event) => {
+          statusEl.textContent = `Status: Disconnected (code ${event.code})`;
+          appendMessage({ code: event.code }, 'disconnected');
+        };
+
+        socket.onerror = () => {
+          appendMessage({ detail: 'websocket error' }, 'socket-error');
+        };
+      }
+
+      function disconnectSocket() {
+        if (socket) {
+          socket.close();
+          socket = null;
+        }
+      }
+
+      function sendMessage() {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          appendMessage({ detail: 'socket is not connected' }, 'error');
+          return;
+        }
+
+        const payload = {
+          ciphertext: ciphertextEl.value,
+          iv: ivEl.value,
+        };
+
+        socket.send(JSON.stringify(payload));
+        appendMessage(payload, 'sent');
+      }
+
+      document.getElementById('getTokenBtn').addEventListener('click', getToken);
+      document.getElementById('connectBtn').addEventListener('click', connectSocket);
+      document.getElementById('disconnectBtn').addEventListener('click', disconnectSocket);
+      document.getElementById('sendBtn').addEventListener('click', sendMessage);
+    </script>
+  </body>
+</html>

@@ -24,7 +24,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
-from .views import swagger_ui_view
+from .views import chat_demo_view, swagger_ui_view
 
 schema_view = get_schema_view(
     title="OnlineChat API",
@@ -36,6 +36,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("demo/chat/", chat_demo_view, name="chat-demo"),
     path("api/schema/", schema_view, name="openapi-schema"),
     path("api/docs/", swagger_ui_view, name="swagger-ui"),
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),

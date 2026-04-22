@@ -1,4 +1,5 @@
 from django.http import HttpResponse
+from django.shortcuts import render
 
 
 def swagger_ui_view(request):
@@ -26,3 +27,7 @@ def swagger_ui_view(request):
 </html>
 """
     return HttpResponse(html)
+
+
+def chat_demo_view(request):
+    return render(request, "chat_demo.html")

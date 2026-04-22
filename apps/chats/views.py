@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.schemas.openapi import AutoSchema
@@ -130,3 +132,98 @@ class ChatMessageListCreateView(APIView):
         )
         output = MessageSerializer(message)
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+class ChatConsumer(AsyncJsonWebsocketConsumer):
+    async def connect(self):
+        user = self.scope.get("user")
+        if user is None or user.is_anonymous:
+            await self.close(code=4401)
+            return
+
+        self.chat_id = int(self.scope["url_route"]["kwargs"]["chat_id"])
+        self.group_name = f"chat_{self.chat_id}"
+
+        is_member = await self._is_chat_member(user.id, self.chat_id)
+        if not is_member:
+            await self.close(code=4403)
+            return
+
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, "group_name"):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def receive_json(self, content, **kwargs):
+        ciphertext = content.get("ciphertext")
+        iv = content.get("iv")
+
+        if not ciphertext or not iv:
+            await self.send_json({"detail": "ciphertext and iv are required."})
+            return
+
+        message_payload = await self._create_message(
+            chat_id=self.chat_id,
+            sender_user_id=self.scope["user"].id,
+            ciphertext=ciphertext,
+            iv=iv,
+        )
+        if message_payload is None:
+            await self.send_json({"detail": "Unable to send message."})
+            return
+
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": "chat.message",
+                "payload": message_payload,
+            },
+        )
+
+    async def chat_message(self, event):
+        await self.send_json(event["payload"])
+
+    @database_sync_to_async
+    def _is_chat_member(self, user_id, chat_id):
+        return (
+            Chat.objects.filter(
+                id=chat_id,
+            )
+            .filter(Q(sender_user_id=user_id) | Q(receiver_user_id=user_id))
+            .exists()
+        )
+
+    @database_sync_to_async
+    def _create_message(self, chat_id, sender_user_id, ciphertext, iv):
+        chat = Chat.objects.filter(id=chat_id).first()
+        if chat is None:
+            return None
+
+        if sender_user_id not in [chat.sender_user_id, chat.receiver_user_id]:
+            return None
+
+        receiver_user_id = (
+            chat.receiver_user_id
+            if sender_user_id == chat.sender_user_id
+            else chat.sender_user_id
+        )
+
+        message = Message.objects.create(
+            chat_id=chat.id,
+            sender_user_id=sender_user_id,
+            receiver_user_id=receiver_user_id,
+            ciphertext=ciphertext,
+            iv=iv,
+        )
+
+        return {
+            "id": message.id,
+            "chat_id": message.chat_id,
+            "iv": message.iv,
+            "ciphertext": message.ciphertext,
+            "receiver_user_id": message.receiver_user_id,
+            "sender_user_id": message.sender_user_id,
+            "created_at": message.created_at.isoformat(),
+        }
