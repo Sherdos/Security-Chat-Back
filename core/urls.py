@@ -16,6 +16,8 @@ Including another URLconf
 """
 
 from django.contrib import admin
+from django.conf import settings
+from django.conf.urls.static import static
 from django.urls import include, path
 from rest_framework import permissions
 from rest_framework.schemas import get_schema_view
@@ -44,3 +46,6 @@ urlpatterns = [
     path("api/users/", include("apps.users.urls")),
     path("api/chats/", include("apps.chats.urls")),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

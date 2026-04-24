@@ -1,4 +1,6 @@
 env
 *.sqlite3
 __pycache__
-
+*.code-workspace
+media
+.continue
