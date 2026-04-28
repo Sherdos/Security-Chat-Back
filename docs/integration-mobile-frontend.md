@@ -5,6 +5,7 @@ This guide describes end-to-end integration with the current backend for:
 - Profile personalization
 - Direct chat (1:1)
 - Group chat and supergroups with topics
+- Group end-to-end key exchange
 - Attachments and notifications
 - Realtime messaging via WebSocket
 
@@ -63,6 +64,7 @@ For all protected REST endpoints:
 
 For WebSocket:
 - Query param: `?token=<access_token>`
+- Or `Authorization: Bearer <access_token>` in the handshake header
 
 ---
 
@@ -74,7 +76,12 @@ For WebSocket:
 ### 2.2 List users (for starting chats)
 `GET /api/users/list/`
 
-### 2.3 Update current profile personalization
+### 2.3 Search users
+`GET /api/users/search/?q=<query>`
+
+Returns users whose usernames match the query, excluding the current user.
+
+### 2.4 Update current profile personalization
 `PUT /api/users/me/profile/` (multipart/form-data)
 
 Fields:
@@ -82,13 +89,13 @@ Fields:
 - `description` (optional string)
 - `status` (optional string)
 
-### 2.4 Get current profile
+### 2.5 Get current profile
 `GET /api/users/me/profile/`
 
-### 2.5 Get another user profile
+### 2.6 Get another user profile
 `GET /api/users/<user_id>/profile/`
 
-### 2.6 Public key APIs (E2E support)
+### 2.7 Public key APIs (E2E support)
 - `GET /api/users/me/public-key/`
 - `PUT /api/users/me/public-key/`
 - `GET /api/users/<user_id>/public-key/`
@@ -111,6 +118,24 @@ Nested user profile object shape:
   "description": "Backend engineer",
   "status": "online",
   "created_at": "2026-04-24T10:00:00+00:00"
+}
+```
+
+For REST profile endpoints, the backend returns `UserProfile` payloads with fields such as:
+- `user_id`
+- `public_key`
+- `avatar`
+- `avatar_url`
+- `description`
+- `status`
+- `created_at`
+
+For public-key endpoints, the payload is:
+```json
+{
+  "user_id": 5,
+  "public_key": "<base64_or_text_key>",
+  "created_at": "2026-04-20T12:00:00+00:00"
 }
 ```
 
@@ -317,9 +342,72 @@ Response item example:
 }
 ```
 
+### 4.7 Group E2E key exchange
+`GET /api/chats/groups/<group_id>/e2e-key/`
+
+Returns the group AES key encrypted for the current user:
+```json
+{
+  "ciphertext": "<encrypted_group_key>",
+  "iv": "<iv>",
+  "encrypted_by_id": 2
+}
+```
+
+`POST /api/chats/groups/<group_id>/e2e-key/` (JSON)
+
+Request:
+```json
+{
+  "for_user_id": 9,
+  "ciphertext": "<encrypted_group_key>",
+  "iv": "<iv>"
+}
+```
+
+Only group members can store key material for another member.
+
 ---
 
 ## 5) Realtime WebSocket Integration
+
+### 5.0 Presence and notifications sockets
+
+Presence endpoint:
+`/ws/presence/?token=<access_token>`
+
+Incoming frames:
+```json
+{ "type": "ping" }
+```
+```json
+{ "type": "typing", "chat_id": 7 }
+```
+```json
+{ "type": "typing", "group_id": 15 }
+```
+```json
+{ "type": "typing", "topic_id": 11 }
+```
+
+Outgoing frames:
+```json
+{ "type": "presence", "user_id": 2, "online": true }
+```
+```json
+{ "type": "typing", "user_id": 2, "chat_id": 7 }
+```
+```json
+{ "type": "typing", "user_id": 2, "group_id": 15 }
+```
+```json
+{ "type": "typing", "user_id": 2, "topic_id": 11 }
+```
+
+Notification endpoint:
+`/ws/notifications/?token=<access_token>`
+
+This socket only receives notification frames and does not expect client messages.
 
 ## 5.1 Direct chat socket
 Endpoint:
@@ -417,6 +505,7 @@ Use this from mobile/frontend after user opens chat/group/topic related to that 
 2. If missing or expired, login/refresh.
 3. Fetch `GET /api/users/me/` and `GET /api/users/me/profile/`.
 4. Fetch `GET /api/chats/notifications/`.
+5. Open `/ws/presence/` and `/ws/notifications/` for realtime status and alert updates.
 
 ### 7.2 Direct chat screen
 1. Open direct chat via `POST /api/chats/` (idempotent behavior for existing pair).

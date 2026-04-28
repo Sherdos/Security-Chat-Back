@@ -1,12 +1,15 @@
+from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.schemas.openapi import AutoSchema
 from rest_framework.views import APIView
 
-from ..models import Group, GroupMember, GroupMessage, GroupTopic, Notification
+from ..models import Group, GroupEncryptedKey, GroupMember, GroupMessage, GroupTopic, Notification
 from ..serializers import (
     GroupCreateSerializer,
+    GroupE2EKeySerializer,
     GroupMemberAddSerializer,
     GroupMemberSerializer,
     GroupMessageCreateSerializer,
@@ -296,3 +299,37 @@ class GroupMessageListCreateView(APIView):
 
         output = GroupMessageSerializer(message)
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+class GroupE2EKeyView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    schema = AutoSchema(tags=["Groups"], operation_id_base="group_e2e_key")
+
+    def get(self, request, group_id):
+        key = GroupEncryptedKey.objects.filter(
+            group_id=group_id, encrypted_for=request.user
+        ).first()
+        if not key:
+            return Response({"detail": "No key found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({
+            "ciphertext": key.ciphertext,
+            "iv": key.iv,
+            "encrypted_by_id": key.encrypted_by_id,
+        })
+
+    def post(self, request, group_id):
+        if not GroupMember.objects.filter(group_id=group_id, user=request.user).exists():
+            return Response({"detail": "Not a group member."}, status=status.HTTP_403_FORBIDDEN)
+        for_user_id = request.data.get("for_user_id")
+        ciphertext = request.data.get("ciphertext")
+        iv = request.data.get("iv")
+        if not (for_user_id and ciphertext and iv):
+            return Response({"detail": "for_user_id, ciphertext, and iv are required."}, status=status.HTTP_400_BAD_REQUEST)
+        UserModel = get_user_model()
+        for_user = get_object_or_404(UserModel, id=for_user_id)
+        GroupEncryptedKey.objects.update_or_create(
+            group_id=group_id,
+            encrypted_for=for_user,
+            defaults={"encrypted_by": request.user, "ciphertext": ciphertext, "iv": iv},
+        )
+        return Response({"status": "ok"}, status=status.HTTP_200_OK)

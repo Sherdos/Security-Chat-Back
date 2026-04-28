@@ -4,6 +4,7 @@ from .views import (
     ChatListCreateView,
     ChatMessageListCreateView,
     GroupDetailView,
+    GroupE2EKeyView,
     GroupListCreateView,
     GroupMemberListAddView,
     GroupMessageListCreateView,
@@ -31,6 +32,11 @@ urlpatterns = [
         "groups/<int:group_id>/messages/",
         GroupMessageListCreateView.as_view(),
         name="group_messages",
+    ),
+    path(
+        "groups/<int:group_id>/e2e-key/",
+        GroupE2EKeyView.as_view(),
+        name="group_e2e_key",
     ),
     path(
         "<int:chat_id>/messages/",

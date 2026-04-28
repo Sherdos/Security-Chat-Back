@@ -153,3 +153,22 @@ class GroupMessage(models.Model):
     ciphertext = models.TextField()
     iv = models.CharField(max_length=32)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class GroupEncryptedKey(models.Model):
+    """Stores a group's AES-256 key encrypted for a specific member via ECDH."""
+    group = models.ForeignKey(
+        "chats.Group", on_delete=models.CASCADE, related_name="encrypted_keys"
+    )
+    encrypted_by = models.ForeignKey(
+        user, on_delete=models.CASCADE, related_name="distributed_keys"
+    )
+    encrypted_for = models.ForeignKey(
+        user, on_delete=models.CASCADE, related_name="received_keys"
+    )
+    ciphertext = models.TextField()
+    iv = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("group", "encrypted_for")

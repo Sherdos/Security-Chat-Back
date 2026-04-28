@@ -5,19 +5,27 @@ from .chat import (
 )
 from .group import (
     GroupDetailView,
+    GroupE2EKeyView,
     GroupListCreateView,
     GroupMemberListAddView,
     GroupMessageListCreateView,
     GroupTopicListCreateView,
 )
 from .notification import NotificationListView, NotificationMarkReadView
-from .websocket import ChatConsumer, GroupConsumer, GroupTopicConsumer
+from .websocket import (
+    ChatConsumer,
+    GroupConsumer,
+    GroupTopicConsumer,
+    NotificationConsumer,
+    PresenceConsumer,
+)
 
 __all__ = [
     "ChatListCreateView",
     "ChatMessageListCreateView",
     "MessageAttachmentCreateView",
     "GroupDetailView",
+    "GroupE2EKeyView",
     "GroupListCreateView",
     "GroupMemberListAddView",
     "GroupMessageListCreateView",
@@ -27,4 +35,6 @@ __all__ = [
     "ChatConsumer",
     "GroupConsumer",
     "GroupTopicConsumer",
+    "NotificationConsumer",
+    "PresenceConsumer",
 ]

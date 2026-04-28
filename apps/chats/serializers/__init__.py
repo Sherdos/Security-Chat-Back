@@ -8,6 +8,7 @@ from .chat import (
 )
 from .group import (
     GroupCreateSerializer,
+    GroupE2EKeySerializer,
     GroupMemberAddSerializer,
     GroupMemberSerializer,
     GroupMessageCreateSerializer,
@@ -26,6 +27,7 @@ __all__ = [
     "MessageCreateSerializer",
     "MessageSerializer",
     "GroupCreateSerializer",
+    "GroupE2EKeySerializer",
     "GroupMemberAddSerializer",
     "GroupMemberSerializer",
     "GroupMessageCreateSerializer",

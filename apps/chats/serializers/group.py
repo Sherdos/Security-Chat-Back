@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .base import BaseSerializer, UserProfileChatSerializer, UserProfilesSerializer
-from ..models import Group, GroupMember, GroupMessage, GroupTopic
+from ..models import Group, GroupEncryptedKey, GroupMember, GroupMessage, GroupTopic
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -104,3 +104,10 @@ class GroupMessageCreateSerializer(serializers.Serializer):
     topic_id = serializers.IntegerField(required=False)
     ciphertext = serializers.CharField()
     iv = serializers.CharField(max_length=32)
+
+
+class GroupE2EKeySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GroupEncryptedKey
+        fields = ["id", "group_id", "encrypted_by_id", "encrypted_for_id", "ciphertext", "iv", "created_at"]
+        read_only_fields = ["id", "group_id", "encrypted_by_id", "created_at"]
