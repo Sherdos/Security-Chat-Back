@@ -88,6 +88,7 @@ ASGI_APPLICATION = "core.asgi.application"
 _db_url = os.getenv("DATABASE_URL", "")
 if _db_url.startswith("postgres"):
     import dj_database_url  # type: ignore[import]
+
     DATABASES = {"default": dj_database_url.parse(_db_url)}
 else:
     DATABASES = {
@@ -132,7 +133,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
