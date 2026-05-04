@@ -41,6 +41,12 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def receive_json(self, content, **kwargs):
+        msg_type = content.get("type")
+
+        if msg_type == "read":
+            await self._handle_read(content)
+            return
+
         ciphertext = content.get("ciphertext")
         iv = content.get("iv")
 
@@ -84,10 +90,37 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
                 },
             )
 
+    async def _handle_read(self, content):
+        try:
+            message_id = int(content.get("message_id"))
+        except (TypeError, ValueError):
+            return
+
+        reader_id = self.scope["user"].id
+        sender_id = await self._mark_message_read(message_id, reader_id)
+        if sender_id is None:
+            return  # message not found or already read or not the receiver
+
+        # Notify the sender's client so it can update the checkmark.
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": "chat.read.receipt",
+                "payload": {
+                    "type": "read_receipt",
+                    "message_id": message_id,
+                    "reader_user_id": reader_id,
+                },
+            },
+        )
+
     async def chat_message(self, event):
         await self.send_json(event["payload"])
 
     async def chat_typing(self, event):
+        await self.send_json(event["payload"])
+
+    async def chat_read_receipt(self, event):
         await self.send_json(event["payload"])
 
     @database_sync_to_async
@@ -134,9 +167,19 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             "chat_id": message.chat_id,
             "iv": message.iv,
             "ciphertext": message.ciphertext,
+            "is_read": message.is_read,
             "receiver_user_id": message.receiver_user_id,
             "sender_user_id": message.sender_user_id,
             "created_at": message.created_at.isoformat(),
+            # Included so clients can update sidebar last_message without re-fetching.
+            "_last_message": {
+                "id": message.id,
+                "ciphertext": message.ciphertext,
+                "iv": message.iv,
+                "sender_user_id": message.sender_user_id,
+                "created_at": message.created_at.isoformat(),
+                "is_read": message.is_read,
+            },
             "_notification": {
                 "id": notification.id,
                 "recipient_id": receiver_user_id,
@@ -145,6 +188,22 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
                 "created_at": notification.created_at.isoformat(),
             },
         }
+
+    @database_sync_to_async
+    def _mark_message_read(self, message_id: int, reader_id: int):
+        """
+        Mark the message as read if the reader is the receiver and it isn't already read.
+        Returns the sender_user_id so the caller can notify them, or None on failure.
+        """
+        updated = Message.objects.filter(
+            id=message_id,
+            receiver_user_id=reader_id,
+            is_read=False,
+        ).update(is_read=True)
+        if not updated:
+            return None
+        msg = Message.objects.filter(id=message_id).only("sender_user_id").first()
+        return msg.sender_user_id if msg else None
 
 
 class GroupConsumer(AsyncJsonWebsocketConsumer):
@@ -297,6 +356,13 @@ class GroupConsumer(AsyncJsonWebsocketConsumer):
                 }
             )
 
+        last_msg = {
+            "id": message.id,
+            "ciphertext": message.ciphertext,
+            "iv": message.iv,
+            "sender_user_id": message.sender_user_id,
+            "created_at": message.created_at.isoformat(),
+        }
         return {
             "id": message.id,
             "group_id": message.group_id,
@@ -305,6 +371,7 @@ class GroupConsumer(AsyncJsonWebsocketConsumer):
             "ciphertext": message.ciphertext,
             "iv": message.iv,
             "created_at": message.created_at.isoformat(),
+            "_last_message": last_msg,
             "_notifications": notification_pushes,
         }, None
 
@@ -453,6 +520,13 @@ class GroupTopicConsumer(AsyncJsonWebsocketConsumer):
                 }
             )
 
+        last_msg = {
+            "id": message.id,
+            "ciphertext": message.ciphertext,
+            "iv": message.iv,
+            "sender_user_id": message.sender_user_id,
+            "created_at": message.created_at.isoformat(),
+        }
         return {
             "id": message.id,
             "group_id": message.group_id,
@@ -461,6 +535,7 @@ class GroupTopicConsumer(AsyncJsonWebsocketConsumer):
             "ciphertext": message.ciphertext,
             "iv": message.iv,
             "created_at": message.created_at.isoformat(),
+            "_last_message": last_msg,
             "_notifications": notification_pushes,
         }, None
 

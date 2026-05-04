@@ -5,6 +5,9 @@ from ..models import Chat, Message, MessageAttachment
 
 
 class ChatSerializer(UserProfilesSerializer):
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Chat
         fields = (
@@ -14,12 +17,36 @@ class ChatSerializer(UserProfilesSerializer):
             "created_at",
             "receiver_user",
             "sender_user",
+            "last_message",
+            "unread_count",
         )
         extra_kwargs = {
             "id": {"read_only": True},
             "sender_user_id": {"read_only": True},
             "created_at": {"read_only": True},
         }
+
+    def get_last_message(self, obj):
+        msg = obj.messages.order_by("-created_at").first()
+        if msg is None:
+            return None
+        return {
+            "id": msg.id,
+            "ciphertext": msg.ciphertext,
+            "iv": msg.iv,
+            "sender_user_id": msg.sender_user_id,
+            "created_at": msg.created_at.isoformat(),
+            "is_read": msg.is_read,
+        }
+
+    def get_unread_count(self, obj):
+        request = self.context.get("request")
+        if not request:
+            return 0
+        return obj.messages.filter(
+            receiver_user=request.user,
+            is_read=False,
+        ).count()
 
 
 class ChatCreateSerializer(serializers.Serializer):
@@ -58,6 +85,7 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
 
 class MessageAttachmentCreateSerializer(serializers.Serializer):
     file = serializers.FileField()
+    attachment_type = serializers.CharField()
 
 
 class MessageSerializer(UserProfilesSerializer):
@@ -74,11 +102,13 @@ class MessageSerializer(UserProfilesSerializer):
             "sender_user_id",
             "receiver_user",
             "sender_user",
+            "is_read",
             "created_at",
             "attachments",
         )
         extra_kwargs = {
             "id": {"read_only": True},
+            "is_read": {"read_only": True},
             "created_at": {"read_only": True},
             "sender_user": {"read_only": True},
         }

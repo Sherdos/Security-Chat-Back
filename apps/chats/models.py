@@ -30,6 +30,7 @@ class Message(models.Model):
     sender_user = models.ForeignKey(
         user, on_delete=models.CASCADE, related_name="send_messages"
     )
+    is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
 

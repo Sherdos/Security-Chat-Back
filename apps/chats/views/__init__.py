@@ -2,6 +2,7 @@ from .chat import (
     ChatListCreateView,
     ChatMessageListCreateView,
     MessageAttachmentCreateView,
+    MessageMarkReadView,
 )
 from .group import (
     GroupDetailView,
@@ -30,6 +31,7 @@ __all__ = [
     "GroupMemberListAddView",
     "GroupMessageListCreateView",
     "GroupTopicListCreateView",
+    "MessageMarkReadView",
     "NotificationListView",
     "NotificationMarkReadView",
     "ChatConsumer",

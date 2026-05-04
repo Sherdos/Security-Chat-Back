@@ -1,3 +1,5 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.db.models import Q
 from rest_framework import permissions, status
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -33,10 +35,11 @@ class ChatListCreateView(APIView):
         return serializer_class(*args, **kwargs)
 
     def get(self, request):
-        chats = Chat.objects.filter(
-            sender_user=request.user,
-        ) | Chat.objects.filter(receiver_user=request.user)
-        chats = chats.order_by("-created_at")
+        chats = (
+            Chat.objects.filter(sender_user=request.user)
+            | Chat.objects.filter(receiver_user=request.user)
+        )
+        chats = chats.prefetch_related("messages").order_by("-created_at")
         serializer = ChatSerializer(chats, context={"request": request}, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -184,11 +187,12 @@ class MessageAttachmentCreateView(APIView):
             )
 
         uploaded_file = serializer.validated_data["file"]
+        attachment_type = serializer.validated_data["attachment_type"]
         attachment = MessageAttachment.objects.create(
             message=message,
             uploaded_by=request.user,
             file=uploaded_file,
-            attachment_type=detect_attachment_type(uploaded_file),
+            attachment_type=detect_attachment_type(attachment_type),
         )
         notification_recipient = (
             message.receiver_user
@@ -203,3 +207,40 @@ class MessageAttachmentCreateView(APIView):
         )
         output = MessageAttachmentSerializer(attachment, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+class MessageMarkReadView(APIView):
+    """POST /api/chats/messages/{message_id}/read/ — mark a message as read."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    schema = AutoSchema(tags=["Chats"], operation_id_base="message_mark_read")
+
+    def post(self, request, message_id):
+        updated = Message.objects.filter(
+            id=message_id,
+            receiver_user=request.user,
+            is_read=False,
+        ).update(is_read=True)
+
+        if not updated:
+            # Already read or not found/not the receiver — treat as success.
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        msg = Message.objects.filter(id=message_id).only(
+            "chat_id", "sender_user_id"
+        ).first()
+        if msg:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"chat_{msg.chat_id}",
+                {
+                    "type": "chat.read.receipt",
+                    "payload": {
+                        "type": "read_receipt",
+                        "message_id": message_id,
+                        "reader_user_id": request.user.id,
+                    },
+                },
+            )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

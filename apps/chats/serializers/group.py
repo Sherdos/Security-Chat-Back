@@ -6,6 +6,7 @@ from ..models import Group, GroupEncryptedKey, GroupMember, GroupMessage, GroupT
 
 class GroupSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
+    last_message = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
@@ -18,6 +19,7 @@ class GroupSerializer(serializers.ModelSerializer):
             "is_supergroup",
             "created_by_id",
             "created_at",
+            "last_message",
         )
         extra_kwargs = {
             "id": {"read_only": True},
@@ -31,6 +33,18 @@ class GroupSerializer(serializers.ModelSerializer):
             return None
         url = obj.avatar.url
         return request.build_absolute_uri(url) if request else url
+
+    def get_last_message(self, obj):
+        msg = obj.messages.order_by("-created_at").first()
+        if msg is None:
+            return None
+        return {
+            "id": msg.id,
+            "ciphertext": msg.ciphertext,
+            "iv": msg.iv,
+            "sender_user_id": msg.sender_user_id,
+            "created_at": msg.created_at.isoformat(),
+        }
 
 
 class GroupCreateSerializer(serializers.Serializer):

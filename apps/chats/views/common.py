@@ -7,13 +7,12 @@ from ..models import MessageAttachment
 User = get_user_model()
 
 
-def detect_attachment_type(uploaded_file):
-    mime_type, _ = mimetypes.guess_type(uploaded_file.name)
-    if mime_type:
-        if mime_type.startswith("image/"):
+def detect_attachment_type(attachment_type):
+    if attachment_type:
+        if attachment_type == "image":
             return MessageAttachment.ATTACHMENT_IMAGE
-        if mime_type.startswith("video/"):
+        if attachment_type == "video":
             return MessageAttachment.ATTACHMENT_VIDEO
-        if mime_type.startswith("audio/"):
+        if attachment_type == "audio":
             return MessageAttachment.ATTACHMENT_AUDIO
     return MessageAttachment.ATTACHMENT_FILE

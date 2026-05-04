@@ -10,6 +10,7 @@ from .views import (
     GroupMessageListCreateView,
     GroupTopicListCreateView,
     MessageAttachmentCreateView,
+    MessageMarkReadView,
     NotificationListView,
     NotificationMarkReadView,
 )
@@ -47,6 +48,11 @@ urlpatterns = [
         "messages/<int:message_id>/attachments/",
         MessageAttachmentCreateView.as_view(),
         name="message_attachment_create",
+    ),
+    path(
+        "messages/<int:message_id>/read/",
+        MessageMarkReadView.as_view(),
+        name="message_mark_read",
     ),
     path("notifications/", NotificationListView.as_view(), name="notification_list"),
     path(
